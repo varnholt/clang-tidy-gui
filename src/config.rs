@@ -53,6 +53,7 @@ impl Config {
             println!("Config saved successfully");
         }
     }
+
     pub fn set_run_clang_tidy_path(&mut self, path: String) {
         self.run_clang_tidy_path = path;
         self.save();
@@ -76,7 +77,7 @@ impl Config {
     }
 }
 
-pub(crate) fn load_fixes<P: AsRef<Path>>(path: P) -> Result<Vec<config::Fix>, io::Error> {
+pub fn load_fixes<P: AsRef<Path>>(path: P) -> Result<Vec<config::Fix>, io::Error> {
     let file = File::open(path)?;
     let reader = io::BufReader::new(file);
     let mut fixes = Vec::new();

@@ -1,10 +1,19 @@
 use eframe::egui;
 use rfd::FileDialog;
 use crate::config::{Config, Fix};
+use crate::utils;
+use std::sync::{Arc, Mutex};
+use std::thread;
+use std::time::Duration;
+
+type StartButtonCallback = Box<dyn Fn() + Send + Sync>;
 
 pub struct Application {
     pub config: Config,
     pub select_all_checked: bool,
+
+    // handling of processing
+    pub is_running: Arc<Mutex<bool>>,
 }
 
 impl Application {
@@ -12,7 +21,20 @@ impl Application {
         Self {
             config,
             select_all_checked: false,
+
+            is_running: Arc::new(Mutex::new(false)),
         }
+    }
+
+    fn start_processing(&self) {
+        let is_running = Arc::clone(&self.is_running);
+        let config = self.config.clone(); // clone the config
+        *is_running.lock().unwrap() = true;
+        thread::spawn(move || {
+            utils::process_fixes(config);
+            thread::sleep(Duration::from_secs(5));
+            *is_running.lock().unwrap() = false;
+        });
     }
 }
 
@@ -73,15 +95,20 @@ impl eframe::App for Application {
                         // start button
                         ui.label(""); // empty label for alignment
                         ui.horizontal(|ui| {
+                            let is_running = self.is_running.lock().unwrap();
                             let available_width = ui.available_width();
 
-                            if ui.button("Start").clicked() {
+                            if ui.add_enabled(!*is_running, egui::Button::new("Start")).clicked() {
+
                                 println!("Start button pressed with clang path: {} and project path: {}",
                                          self.config.run_clang_tidy_path,
                                          self.config.project_path);
 
-                                // Implement the start functionality here
+                                // drop lock before starting the task
+                                drop(is_running);
+                                self.start_processing();
                             }
+
                             ui.add_space(available_width * 0.2); // Adjust spacing to align the button
                         });
                         ui.end_row();
@@ -91,7 +118,7 @@ impl eframe::App for Application {
                 ui.separator();
                 ui.heading("Fixes");
 
-                // select all
+                // Select all
                 ui.horizontal(|ui| {
                     let response = ui.checkbox(&mut self.select_all_checked, "Select all");
                     if response.changed() {
@@ -102,7 +129,7 @@ impl eframe::App for Application {
                     }
                 });
 
-                // collect changes to apply after the loop
+                // Collect changes to apply after the loop
                 let mut changes = Vec::new();
                 for fix in &mut self.config.fixes {
                     let mut enabled = fix.enabled;
