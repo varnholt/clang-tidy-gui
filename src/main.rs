@@ -9,6 +9,10 @@ mod ui;
 mod config;
 mod utils;
 
+// C:\build_tools\LLVM\bin\run-clang-tidy
+// C:\git\mine\modernize_test\compile_commands.json
+// C:\git\mine\modernize_test
+
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     
@@ -32,6 +36,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("[{}] {}", if available_fix .enabled { "x" } else { " " }, available_fix .name);
     }
 
+    // show UI
     let app = Application::new(config);
     let options = eframe::NativeOptions::default();
     eframe::run_native("fixcpp", options, Box::new(|_cc| Box::new(app)));
