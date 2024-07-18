@@ -1,19 +1,24 @@
+use crate::config::Config;
+use crate::utils;
 use eframe::egui;
 use rfd::FileDialog;
-use crate::config::{Config, Fix};
-use crate::utils;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread;
-use std::time::Duration;
 
-type StartButtonCallback = Box<dyn Fn() + Send + Sync>;
-
+mod ui_constants {
+    pub static BUTTON_WIDTH: f32 = 100.0;
+    pub static LINEEDIT_WIDTH: f32 = 300.0;
+    pub static WIDGET_HEIGHT: f32 = 20.0;
+}
 pub struct Application {
     pub config: Config,
     pub select_all_checked: bool,
+    pub filter_text: String,
 
     // handling of processing
     pub is_running: Arc<Mutex<bool>>,
+    pub cancel_flag: Arc<AtomicBool>,
 }
 
 impl Application {
@@ -21,42 +26,73 @@ impl Application {
         Self {
             config,
             select_all_checked: false,
+            filter_text: String::new(),
 
             is_running: Arc::new(Mutex::new(false)),
+            cancel_flag: Arc::new(AtomicBool::new(false)),
         }
     }
 
     fn start_processing(&self) {
         let is_running = Arc::clone(&self.is_running);
+        let cancel_flag = Arc::clone(&self.cancel_flag);
         let config = self.config.clone(); // clone the config
         *is_running.lock().unwrap() = true;
         thread::spawn(move || {
-            utils::process_fixes(config);
-            thread::sleep(Duration::from_secs(5));
+            utils::process_fixes(config, cancel_flag);
             *is_running.lock().unwrap() = false;
         });
     }
+
+    fn cancel_processing(&self) {
+        self.cancel_flag.store(true, Ordering::Release);
+    }
+
+    fn add_enabled_sized(
+        &self,
+        ui: &mut egui::Ui,
+        enabled: bool,
+        width: f32,
+        widget: impl egui::Widget,
+    ) -> egui::Response {
+        let size = egui::Vec2::new(width, WIDGET_HEIGHT); // Adjust height if needed
+        let layout = egui::Layout::centered_and_justified(ui.layout().main_dir());
+
+        ui.allocate_ui_with_layout(size, layout, |ui| {
+            ui.set_enabled(enabled);
+            ui.add(widget)
+        })
+        .inner
+    }
 }
+
+use ui_constants::BUTTON_WIDTH;
+use ui_constants::LINEEDIT_WIDTH;
+use ui_constants::WIDGET_HEIGHT;
 
 impl eframe::App for Application {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         egui::CentralPanel::default().show(ctx, |ui| {
             egui::ScrollArea::vertical().show(ui, |ui| {
-                ui.heading("fixcpp");
+
+                ui.heading("Project Configuration");
+                ui.add_space(10.0);
 
                 egui::Grid::new("grid")
                     .num_columns(3)
                     .spacing([20.0, 10.0])
+                    .min_col_width(ui.available_width() / 3.0)
                     .show(ui, |ui| {
-
                         // run-clang-tidy path
                         ui.label("Path to run-clang-tidy:");
                         ui.horizontal(|ui| {
-                            let available_width = ui.available_width();
-                            ui.add_sized([available_width * 0.8, 20.0], egui::TextEdit::singleline(&mut self.config.run_clang_tidy_path));
-                            if ui.button("Select...").clicked() {
+                            ui.add_sized([LINEEDIT_WIDTH, WIDGET_HEIGHT], egui::TextEdit::singleline(
+                                &mut self.config.run_clang_tidy_path,
+                            ));
+                            if ui.add_sized([BUTTON_WIDTH, WIDGET_HEIGHT], egui::Button::new("Select...")).clicked() {
                                 if let Some(path) = FileDialog::new().pick_file() {
-                                    self.config.set_run_clang_tidy_path(path.display().to_string());
+                                    self.config
+                                        .set_run_clang_tidy_path(path.display().to_string());
                                 }
                             }
                         });
@@ -65,15 +101,17 @@ impl eframe::App for Application {
                         // build-commands.json path
                         ui.label("build-commands.json path:");
                         ui.horizontal(|ui| {
-                            let available_width = ui.available_width();
-                            ui.add_sized([available_width * 0.8, 20.0], egui::TextEdit::singleline(&mut self.config.build_commands_path));
-                            if ui.button("Select...").clicked() {
+                            ui.add_sized([LINEEDIT_WIDTH, WIDGET_HEIGHT], egui::TextEdit::singleline(
+                                &mut self.config.build_commands_path,
+                            ));
+                            if ui.add_sized([BUTTON_WIDTH, WIDGET_HEIGHT], egui::Button::new("Select...")).clicked() {
                                 if let Some(path) = FileDialog::new()
                                     .add_filter("build-commands.json", &["json"])
                                     .set_file_name("build-commands.json")
                                     .pick_file()
                                 {
-                                    self.config.set_build_commands_path(path.display().to_string());
+                                    self.config
+                                        .set_build_commands_path(path.display().to_string());
                                 }
                             }
                         });
@@ -82,43 +120,77 @@ impl eframe::App for Application {
                         // project path
                         ui.label("Path or file to apply fixes to:");
                         ui.horizontal(|ui| {
-                            let available_width = ui.available_width();
-                            ui.add_sized([available_width * 0.8, 20.0], egui::TextEdit::singleline(&mut self.config.project_path));
-                            if ui.button("Select...").clicked() {
+                            ui.add_sized([LINEEDIT_WIDTH, WIDGET_HEIGHT], egui::TextEdit::singleline(&mut self.config.project_path));
+                            if ui.add_sized([BUTTON_WIDTH, WIDGET_HEIGHT], egui::Button::new("Select...")).clicked() {
                                 if let Some(path) = FileDialog::new().pick_folder() {
                                     self.config.set_project_path(path.display().to_string());
                                 }
                             }
                         });
+
                         ui.end_row();
+                        ui.add_space(10.0);
 
-                        // start button
-                        ui.label(""); // empty label for alignment
                         ui.horizontal(|ui| {
-                            let is_running = self.is_running.lock().unwrap();
-                            let available_width = ui.available_width();
 
-                            if ui.add_enabled(!*is_running, egui::Button::new("Start")).clicked() {
+                            // start button
+                            {
+                                let is_running = self.is_running.lock().unwrap();
 
-                                println!("Start button pressed with clang path: {} and project path: {}",
-                                         self.config.run_clang_tidy_path,
-                                         self.config.project_path);
+                                if self
+                                    .add_enabled_sized(
+                                        ui,
+                                        !*is_running,
+                                        BUTTON_WIDTH,
+                                        egui::Button::new("Start"),
+                                    )
+                                    .clicked()
+                                {
+                                    println!(
+                                        "Start button pressed with clang path: {} and project path: {}",
+                                        self.config.run_clang_tidy_path, self.config.project_path
+                                    );
 
-                                // drop lock before starting the task
-                                drop(is_running);
-                                self.start_processing();
+                                    // drop lock before starting the task
+                                    drop(is_running);
+                                    self.start_processing();
+                                }
                             }
 
-                            ui.add_space(available_width * 0.2); // Adjust spacing to align the button
+                            // cancel button
+                            {
+                                let is_running = self.is_running.lock().unwrap();
+
+                                if self
+                                    .add_enabled_sized(
+                                        ui,
+                                        *is_running,
+                                        BUTTON_WIDTH,
+                                        egui::Button::new("Cancel"),
+                                    )
+                                    .clicked()
+                                {
+                                    self.cancel_processing();
+                                }
+                            }
                         });
+
                         ui.end_row();
                     });
 
                 // fixes section
+                ui.add_space(30.0);
                 ui.separator();
-                ui.heading("Fixes");
+                ui.heading("Clang-Tidy Configuration");
+                ui.add_space(10.0);
 
-                // Select all
+                // add filter
+                ui.horizontal(|ui| {
+                    ui.label("Search:");
+                    ui.add(egui::TextEdit::singleline(&mut self.filter_text));
+                });
+
+                // select all
                 ui.horizontal(|ui| {
                     let response = ui.checkbox(&mut self.select_all_checked, "Select all");
                     if response.changed() {
@@ -129,19 +201,25 @@ impl eframe::App for Application {
                     }
                 });
 
-                // Collect changes to apply after the loop
+                // collect changes to apply after the loop
                 let mut changes = Vec::new();
                 for fix in &mut self.config.fixes {
-                    let mut enabled = fix.enabled;
-                    ui.horizontal(|ui| {
-                        let response = ui.checkbox(&mut enabled, &fix.name);
-                        if response.changed() {
-                            changes.push((fix.name.clone(), enabled));
-                        }
-                    });
+                    if fix
+                        .name
+                        .to_lowercase()
+                        .contains(&self.filter_text.to_lowercase())
+                    {
+                        let mut enabled = fix.enabled;
+                        ui.horizontal(|ui| {
+                            let response = ui.checkbox(&mut enabled, &fix.name);
+                            if response.changed() {
+                                changes.push((fix.name.clone(), enabled));
+                            }
+                        });
+                    }
                 }
 
-                // Apply changes after the loop
+                // apply changes after the loop
                 for (fix_name, enabled) in changes {
                     self.config.set_fix_enabled(&fix_name, enabled);
                 }

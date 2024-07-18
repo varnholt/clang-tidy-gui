@@ -1,9 +1,9 @@
+use crate::config;
+use serde::{Deserialize, Serialize};
 use std::fs::File;
 use std::io;
 use std::io::{BufRead, Read};
 use std::path::Path;
-use serde::{Deserialize, Serialize};
-use crate::config;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Config {
@@ -19,7 +19,6 @@ pub struct Fix {
     pub name: String,
     pub enabled: bool,
 }
-
 
 impl Config {
     pub fn new() -> Self {
@@ -40,7 +39,10 @@ impl Config {
         Ok(config)
     }
 
-    pub fn to_json_file<P: AsRef<std::path::Path>>(&self, path: P) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn to_json_file<P: AsRef<std::path::Path>>(
+        &self,
+        path: P,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let file = File::create(path)?;
         serde_json::to_writer_pretty(file, &self)?;
         Ok(())
@@ -84,9 +86,11 @@ pub fn load_fixes<P: AsRef<Path>>(path: P) -> Result<Vec<config::Fix>, io::Error
 
     for line in reader.lines() {
         let line = line?;
-        fixes.push(config::Fix{name: line, enabled: false});
+        fixes.push(config::Fix {
+            name: line,
+            enabled: false,
+        });
     }
 
     Ok(fixes)
 }
-
