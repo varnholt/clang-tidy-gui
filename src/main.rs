@@ -40,7 +40,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // show UI
     let app = Application::new(config);
     let options = eframe::NativeOptions::default();
-    eframe::run_native("fixcpp", options, Box::new(|_cc| Box::new(app)));
+    eframe::run_native("clang-tidy-gui", options, Box::new(|_cc| Box::new(app)));
 
     Ok(())
 }
