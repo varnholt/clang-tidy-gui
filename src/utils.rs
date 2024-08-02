@@ -43,7 +43,7 @@ fn run_process_and_wait(command: &str, args: &[&str], working_directory: &str) {
         .output()
         .expect("failed to execute process");
 
-    // println!("Output: {:?}", output);
+    println!("Output: {:?}", output);
 }
 
 /// Writes a .clang-tidy file with the specified clang-tidy checks.
@@ -72,7 +72,6 @@ fn write_clang_tidy_file<P: AsRef<Path>>(path: P, checks: &[&String]) -> std::io
         r#"Checks: '{}'
 WarningsAsErrors: ''
 HeaderFilterRegex: ''
-AnalyzeTemporaryDtors: false
 FormatStyle: none
 User: ''
 ExtraArgs: []
