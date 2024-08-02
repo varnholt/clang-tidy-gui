@@ -4,17 +4,16 @@ use std::io::Write;
 use std::path::Path;
 use std::process::Command;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
-pub fn process_fixes(config: Config, cancel_flag: Arc<AtomicBool>) {
-    for fix in &config.fixes {
+pub fn process_fixes(config: Config, cancel_flag: Arc<AtomicBool>, progress: Arc<Mutex<f32>>) {
+    let enabled_fixes: Vec<_> = config.fixes.iter().filter(|fix| fix.enabled).collect();
+    let total_fixes = enabled_fixes.len() as f32;
+
+    for (index, fix) in enabled_fixes.iter().enumerate() {
         if cancel_flag.load(Ordering::Relaxed) {
             println!("Processing cancelled.");
             break;
-        }
-
-        if !fix.enabled {
-            continue;
         }
 
         println!("applying fix: {}", fix.name);
@@ -26,6 +25,10 @@ pub fn process_fixes(config: Config, cancel_flag: Arc<AtomicBool>) {
         // start run-clang-tidy
         let args = [&config.run_clang_tidy_path, ".", "-fix", "-j 10"];
         run_process_and_wait("python", &args, &config.project_path);
+
+        // update progress
+        let mut progress = progress.lock().unwrap();
+        *progress = (index + 1) as f32 / total_fixes * 100.0;
     }
 
     println!("done!");
@@ -40,7 +43,7 @@ fn run_process_and_wait(command: &str, args: &[&str], working_directory: &str) {
         .output()
         .expect("failed to execute process");
 
-    println!("Output: {:?}", output);
+    // println!("Output: {:?}", output);
 }
 
 /// Writes a .clang-tidy file with the specified clang-tidy checks.

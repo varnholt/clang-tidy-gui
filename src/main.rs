@@ -5,10 +5,6 @@ mod config;
 mod ui;
 mod utils;
 
-// C:\build_tools\LLVM\bin\run-clang-tidy
-// C:\git\mine\modernize_test\compile_commands.json
-// C:\git\mine\modernize_test
-
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // read config
     let config_path = "config.json";

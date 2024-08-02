@@ -1,6 +1,8 @@
 use crate::config::Config;
 use crate::utils;
 use eframe::egui;
+use eframe::egui::Vec2;
+use egui::emath;
 use rfd::FileDialog;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
@@ -19,6 +21,7 @@ pub struct Application {
     // handling of processing
     pub is_running: Arc<Mutex<bool>>,
     pub cancel_flag: Arc<AtomicBool>,
+    pub progress: Arc<Mutex<f32>>,
 }
 
 impl Application {
@@ -30,16 +33,21 @@ impl Application {
 
             is_running: Arc::new(Mutex::new(false)),
             cancel_flag: Arc::new(AtomicBool::new(false)),
+            progress: Arc::new(Mutex::new(0.0)),
         }
     }
 
     fn start_processing(&self) {
         let is_running = Arc::clone(&self.is_running);
         let cancel_flag = Arc::clone(&self.cancel_flag);
-        let config = self.config.clone(); // clone the config
+        let config = self.config.clone();
+        let progress = Arc::clone(&self.progress);
+
         *is_running.lock().unwrap() = true;
+        *progress.lock().unwrap() = 0.0;
+
         thread::spawn(move || {
-            utils::process_fixes(config, cancel_flag);
+            utils::process_fixes(config, cancel_flag, progress);
             *is_running.lock().unwrap() = false;
         });
     }
@@ -83,6 +91,7 @@ impl eframe::App for Application {
                     .spacing([20.0, 10.0])
                     .min_col_width(ui.available_width() / 3.0)
                     .show(ui, |ui| {
+
                         // run-clang-tidy path
                         ui.label("Path to run-clang-tidy:");
                         ui.horizontal(|ui| {
@@ -129,7 +138,6 @@ impl eframe::App for Application {
                         });
 
                         ui.end_row();
-                        ui.add_space(10.0);
 
                         ui.horizontal(|ui| {
 
@@ -174,6 +182,12 @@ impl eframe::App for Application {
                                 }
                             }
                         });
+
+                        // progress bar
+                        {
+                            let progress = *self.progress.lock().unwrap();
+                            ui.add(egui::ProgressBar::new(progress / 100.0).show_percentage());
+                        }
 
                         ui.end_row();
                     });
