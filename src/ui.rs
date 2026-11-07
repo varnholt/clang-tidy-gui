@@ -401,7 +401,7 @@ impl eframe::App for Application {
                     ];
                     ui.painter().add(egui::Shape::closed_line(
                         points,
-                        egui::Stroke::new(2.0, accent(ui)),
+                        egui::Stroke::new(2.0_f32, accent(ui)),
                     ));
                     ui.painter().circle_filled(center, 3.0, accent(ui));
                     ui.vertical(|ui| {

@@ -22,8 +22,13 @@ def main():
     version = tomllib.loads((root / "Cargo.toml").read_text(encoding="utf-8"))["package"]["version"]
     name = f"clang-tidy-gui-v{version}-{target}"
     executable = "clang-tidy-gui.exe" if "windows" in target else "clang-tidy-gui"
-    files = [root / "target" / target / "release" / executable]
-    files.extend(root / filename for filename in ["README.md", "LICENSE", "CHANGELOG.md"])
+    files = {root / "target" / target / "release" / executable: executable}
+    documents = [
+        "README.md", "LICENSE", "CHANGELOG.md", "CONTRIBUTING.md",
+        "doc/screenshot_main.png", "doc/screenshot_light.png",
+        "examples/cpp/CMakeLists.txt", "examples/cpp/main.cpp",
+    ]
+    files.update({root / filename: filename for filename in documents})
     for file in files:
         if not file.is_file():
             raise SystemExit(f"Missing release input: {file}")
@@ -32,13 +37,13 @@ def main():
     if "windows" in target:
         archive = destination / f"{name}.zip"
         with zipfile.ZipFile(archive, "w", compression=zipfile.ZIP_DEFLATED) as output:
-            for file in files:
-                output.write(file, f"{name}/{file.name}")
+            for file, relative in files.items():
+                output.write(file, f"{name}/{relative}")
     else:
         archive = destination / f"{name}.tar.gz"
         with tarfile.open(archive, "w:gz") as output:
-            for file in files:
-                output.add(file, arcname=f"{name}/{file.name}")
+            for file, relative in files.items():
+                output.add(file, arcname=f"{name}/{relative}")
     digest = hashlib.sha256(archive.read_bytes()).hexdigest()
     archive.with_name(archive.name + ".sha256").write_text(f"{digest}  {archive.name}\n", encoding="utf-8")
     print(archive)
