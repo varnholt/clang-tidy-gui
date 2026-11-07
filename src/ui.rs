@@ -29,6 +29,9 @@ pub struct Application {
     stop: Arc<AtomicBool>,
     stopping: bool,
     refreshing: bool,
+    catalogue_checked_binary: Option<String>,
+    catalogue_changed_at: Option<Instant>,
+    catalogue_error: Option<String>,
     completed: usize,
     total: usize,
     status: String,
@@ -64,6 +67,26 @@ impl Application {
         cc.egui_ctx.set_style(style);
         let dark = config.dark_theme;
         apply_theme(&cc.egui_ctx, dark);
+        let mut app = Self::with_settings(config, config_path, notice, save_enabled);
+        app.refresh_catalogue(&cc.egui_ctx);
+        // Documentation captures should show the discovered catalogue rather than a loading frame.
+        #[cfg(feature = "screenshot")]
+        if std::env::var_os("EFRAME_SCREENSHOT_TO").is_some() {
+            while app.refreshing {
+                app.poll();
+                std::thread::sleep(Duration::from_millis(10));
+            }
+        }
+        app
+    }
+
+    fn with_settings(
+        config: Config,
+        config_path: PathBuf,
+        notice: Option<String>,
+        save_enabled: bool,
+    ) -> Self {
+        let dark = config.dark_theme;
         Self {
             config,
             config_path,
@@ -77,6 +100,9 @@ impl Application {
             stop: Arc::new(AtomicBool::new(false)),
             stopping: false,
             refreshing: false,
+            catalogue_checked_binary: None,
+            catalogue_changed_at: None,
+            catalogue_error: None,
             completed: 0,
             total: 0,
             status: "Ready when you are".into(),
@@ -98,6 +124,10 @@ impl Application {
 
     fn start(&mut self, ctx: &egui::Context) {
         if self.receiver.is_some() {
+            return;
+        }
+        if self.catalogue_checked_binary.as_deref() != Some(&self.config.clang_tidy_path) {
+            self.refresh_catalogue(ctx);
             return;
         }
         if let Err(error) = runner::validate(&self.config) {
@@ -125,6 +155,49 @@ impl Application {
         });
     }
 
+    fn refresh_catalogue(&mut self, ctx: &egui::Context) {
+        if self.receiver.is_some() {
+            return;
+        }
+        let (sender, receiver) = mpsc::sync_channel(1);
+        self.receiver = Some(receiver);
+        self.refreshing = true;
+        self.catalogue_error = None;
+        self.catalogue_changed_at = None;
+        self.status = "Reading installed checks…".into();
+        let binary = self.config.clang_tidy_path.clone();
+        self.catalogue_checked_binary = Some(binary.clone());
+        let ctx = ctx.clone();
+        std::thread::spawn(move || {
+            let _ = sender.send(Event::Catalogue(runner::discover_checks(&binary)));
+            ctx.request_repaint();
+        });
+    }
+
+    fn refresh_due(&self, now: Instant) -> bool {
+        self.receiver.is_none()
+            && self.catalogue_checked_binary.as_deref() != Some(&self.config.clang_tidy_path)
+            && self
+                .catalogue_changed_at
+                .is_none_or(|changed| now.duration_since(changed) >= Duration::from_millis(600))
+    }
+
+    fn catalogue_label(&self) -> String {
+        if self.refreshing {
+            return "Updating checks from configured clang-tidy…".into();
+        }
+        let source = if !self.config.catalogue_from_tool {
+            "Historical bundled fallback · July 2024"
+        } else if self.config.catalogue_binary != self.config.clang_tidy_path {
+            "Saved catalogue · not verified for this clang-tidy"
+        } else if self.catalogue_error.is_some() {
+            "Saved catalogue · automatic refresh failed"
+        } else {
+            "Synced with configured clang-tidy"
+        };
+        format!("{} checks · {source}", self.config.fixes.len())
+    }
+
     fn poll(&mut self) {
         let mut finished = false;
         if let Some(receiver) = &self.receiver {
@@ -136,13 +209,17 @@ impl Application {
                             Ok(names) => {
                                 self.status =
                                     format!("Loaded {} checks from clang-tidy", names.len());
-                                self.config.replace_catalogue(names);
+                                self.config.replace_catalogue(
+                                    names,
+                                    self.catalogue_checked_binary.as_deref().unwrap_or_default(),
+                                );
                                 self.family = "All checks".into();
                                 self.dirty_since = Some(Instant::now());
                             }
                             Err(error) => {
-                                self.notice = Some(error);
-                                self.status = "Could not refresh checks".into();
+                                self.catalogue_error = Some(error);
+                                self.status =
+                                    "Could not refresh checks; existing catalogue retained".into();
                             }
                         }
                         finished = true;
@@ -329,18 +406,20 @@ impl Application {
                 }
             });
         });
-        if ui.add_enabled(self.receiver.is_none(), egui::Button::new("Refresh from installed clang-tidy")).on_hover_text("Replace the bundled catalogue with checks supported by your clang-tidy. Matching selections are kept.").clicked() {
-            let (sender, receiver) = mpsc::sync_channel(1);
-            self.receiver = Some(receiver);
-            self.refreshing = true;
-            self.notice = None;
-            self.status = "Reading installed checks…".into();
-            let binary = self.config.clang_tidy_path.clone();
-            let ctx = ui.ctx().clone();
-            std::thread::spawn(move || {
-                let _ = sender.send(Event::Catalogue(runner::discover_checks(&binary)));
-                ctx.request_repaint();
-            });
+        ui.label(
+            RichText::new(self.catalogue_label())
+                .small()
+                .color(ui.visuals().weak_text_color()),
+        );
+        if let Some(error) = &self.catalogue_error {
+            ui.label(
+                RichText::new("Automatic update unavailable — check the clang-tidy path or retry.")
+                    .small(),
+            )
+            .on_hover_text(error);
+        }
+        if ui.add_enabled(self.receiver.is_none(), egui::Button::new("Refresh checks now")).on_hover_text("Checks update automatically on launch and after changing clang-tidy. Retry here after installing or upgrading LLVM while the app is open.").clicked() {
+            self.refresh_catalogue(ui.ctx());
         }
         ui.separator();
         egui::ScrollArea::vertical().id_salt("checks").auto_shrink([false, false]).show(ui, |ui| {
@@ -370,6 +449,9 @@ impl Application {
 impl eframe::App for Application {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         self.poll();
+        if self.refresh_due(Instant::now()) {
+            self.refresh_catalogue(ctx);
+        }
         let before = self.config.clone();
         let running = self.receiver.is_some();
         if running {
@@ -486,6 +568,12 @@ impl eframe::App for Application {
         if self.config != before {
             self.dirty_since = Some(Instant::now());
         }
+        if self.config.clang_tidy_path != before.clang_tidy_path {
+            self.catalogue_changed_at = Some(Instant::now());
+        }
+        if self.catalogue_checked_binary.as_deref() != Some(&self.config.clang_tidy_path) {
+            ctx.request_repaint_after(Duration::from_millis(650));
+        }
         if let Some(since) = self.dirty_since {
             if since.elapsed() > Duration::from_millis(600) {
                 self.save();
@@ -493,7 +581,7 @@ impl eframe::App for Application {
                 ctx.request_repaint_after(Duration::from_millis(650));
             }
         }
-        if running && ctx.input(|i| i.viewport().close_requested()) {
+        if running && !self.refreshing && ctx.input(|i| i.viewport().close_requested()) {
             ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
             self.notice = Some(
                 "A check is active. Stop after this check, then close the window once it finishes."
@@ -583,4 +671,92 @@ fn apply_theme(ctx: &egui::Context, dark: bool) {
         visuals.hyperlink_color = Color32::from_rgb(0, 107, 87);
     }
     ctx.set_visuals(visuals);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::Fix;
+
+    fn app() -> Application {
+        let mut config = Config::default();
+        config.merge_catalogue();
+        Application::with_settings(
+            config,
+            PathBuf::from("unused-test-settings.json"),
+            None,
+            false,
+        )
+    }
+
+    fn catalogue_event(app: &mut Application, result: Result<Vec<String>, String>) {
+        let (sender, receiver) = mpsc::sync_channel(1);
+        app.receiver = Some(receiver);
+        app.refreshing = true;
+        app.catalogue_checked_binary = Some(app.config.clang_tidy_path.clone());
+        sender.send(Event::Catalogue(result)).unwrap();
+        app.poll();
+    }
+
+    #[test]
+    fn refresh_is_due_on_startup_and_after_a_debounced_toolchain_change() {
+        let mut app = app();
+        let now = Instant::now();
+        assert!(app.refresh_due(now));
+        app.catalogue_checked_binary = Some(app.config.clang_tidy_path.clone());
+        assert!(!app.refresh_due(now));
+        app.config.clang_tidy_path = "another-clang-tidy".into();
+        app.catalogue_changed_at = Some(now);
+        assert!(!app.refresh_due(now + Duration::from_millis(599)));
+        assert!(app.refresh_due(now + Duration::from_millis(600)));
+        let (_sender, receiver) = mpsc::sync_channel(1);
+        app.receiver = Some(receiver);
+        assert!(!app.refresh_due(now + Duration::from_secs(1)));
+    }
+
+    #[test]
+    fn automatic_refresh_preserves_selections_records_source_and_saves_later() {
+        let mut app = app();
+        app.config.fixes = vec![Fix {
+            name: "modernize-use-nullptr".into(),
+            enabled: true,
+        }];
+        let original_notice = "Settings could not be loaded";
+        app.notice = Some(original_notice.into());
+        catalogue_event(
+            &mut app,
+            Ok(vec![
+                "modernize-use-nullptr".into(),
+                "clang-analyzer-core.CallAndMessage".into(),
+            ]),
+        );
+        assert_eq!(app.config.selected_count(), 1);
+        assert_eq!(app.config.fixes.len(), 2);
+        assert_eq!(app.config.catalogue_binary, app.config.clang_tidy_path);
+        assert!(app.dirty_since.is_some());
+        assert!(app.catalogue_label().contains("Synced"));
+        assert_eq!(app.notice.as_deref(), Some(original_notice));
+        assert!(app.receiver.is_none());
+        assert!(!app.refresh_due(Instant::now()));
+    }
+
+    #[test]
+    fn failure_keeps_fallback_or_cached_catalogue_without_retrying_every_frame() {
+        let mut app = app();
+        let original = app.config.clone();
+        catalogue_event(&mut app, Err("Missing tool".into()));
+        assert_eq!(app.config, original);
+        assert!(app
+            .catalogue_label()
+            .contains("Historical bundled fallback"));
+        assert!(!app.refresh_due(Instant::now()));
+        app.config
+            .replace_catalogue(vec!["modernize-use-nullptr".into()], "clang-tidy");
+        let cached = app.config.clone();
+        catalogue_event(&mut app, Err("Timed out".into()));
+        assert_eq!(app.config, cached);
+        assert!(app.catalogue_label().contains("automatic refresh failed"));
+        app.config.clang_tidy_path = "different-clang-tidy".into();
+        assert!(app.catalogue_label().contains("not verified"));
+    }
 }

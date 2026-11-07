@@ -8,6 +8,7 @@ use std::{
         Arc,
     },
     thread,
+    time::{Duration, Instant},
 };
 
 #[derive(Debug)]
@@ -32,14 +33,69 @@ pub fn discover_checks(binary: &str) -> Result<Vec<String>, String> {
         use std::os::windows::process::CommandExt;
         command.creation_flags(0x08000000);
     }
-    let output = command.output().map_err(|e| e.to_string())?;
-    if !output.status.success() {
+    read_checks(command, Duration::from_secs(10))
+}
+
+fn read_checks(mut command: Command, timeout: Duration) -> Result<Vec<String>, String> {
+    let mut child = command
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|e| e.to_string())?;
+    let stdout = child.stdout.take().ok_or("Cannot capture check list")?;
+    let stderr = child
+        .stderr
+        .take()
+        .ok_or("Cannot capture discovery errors")?;
+    // Consume output concurrently while polling the child, including lists larger than a pipe buffer.
+    let capture = |reader: Box<dyn Read + Send>| {
+        thread::spawn(move || {
+            let mut bytes = Vec::new();
+            reader
+                .take(1_048_576)
+                .read_to_end(&mut bytes)
+                .map(|_| bytes)
+        })
+    };
+    let stdout = capture(Box::new(stdout));
+    let stderr = capture(Box::new(stderr));
+    let started = Instant::now();
+    let result = loop {
+        match child.try_wait() {
+            Ok(Some(status)) => break Ok(status),
+            Ok(None) if started.elapsed() < timeout => thread::sleep(Duration::from_millis(20)),
+            Ok(None) => {
+                break Err(format!(
+                    "Check discovery timed out after {} seconds.",
+                    timeout.as_secs_f32()
+                ))
+            }
+            Err(error) => break Err(format!("Cannot wait for check discovery: {error}")),
+        }
+    };
+    if result.is_err() {
+        let _ = child.kill();
+        let _ = child.wait();
+    }
+    let stdout = stdout
+        .join()
+        .map_err(|_| "Check-list reader failed")?
+        .map_err(|e| e.to_string())?;
+    let stderr = stderr
+        .join()
+        .map_err(|_| "Discovery error reader failed")?
+        .map_err(|e| e.to_string())?;
+    let status = result?;
+    if stdout.len() == 1_048_576 || stderr.len() == 1_048_576 {
+        return Err("Check discovery exceeded the output limit.".into());
+    }
+    if !status.success() {
         return Err(format!(
             "Cannot list checks: {}",
-            String::from_utf8_lossy(&output.stderr)
+            String::from_utf8_lossy(&stderr)
         ));
     }
-    parse_checks(&String::from_utf8_lossy(&output.stdout))
+    parse_checks(&String::from_utf8_lossy(&stdout))
 }
 
 fn parse_checks(output: &str) -> Result<Vec<String>, String> {
@@ -412,6 +468,24 @@ mod tests {
             ]
         );
         assert!(parse_checks("Enabled checks:\n").is_err());
+    }
+
+    #[test]
+    fn discovery_drains_large_output_and_times_out_a_stuck_tool() {
+        let python = resolve_program(&Config::default().python_path).unwrap();
+        let mut command = Command::new(&python);
+        command.args(["-u", "-c", "import sys; sys.stderr.write('x' * 100000); print('Enabled checks:'); [print('    test-check-' + str(i)) for i in range(4000)]"]);
+        assert_eq!(
+            read_checks(command, Duration::from_secs(10)).unwrap().len(),
+            4000
+        );
+        let mut command = Command::new(&python);
+        command.args(["-u", "-c", "import time; time.sleep(30)"]);
+        let started = Instant::now();
+        assert!(read_checks(command, Duration::from_millis(100))
+            .unwrap_err()
+            .contains("timed out"));
+        assert!(started.elapsed() < Duration::from_secs(5));
     }
 }
 

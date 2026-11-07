@@ -17,6 +17,8 @@ cargo package --locked
 
 The tests cover legacy settings, self-contained installation data, command arguments with spaces,
 nonzero exits, stdout/stderr, stop/restart, and preservation of project configuration.
+Catalogue tests cover automatic startup refresh, debounced toolchain changes, selection preservation,
+failed-refresh fallbacks, large discovery output, and a timed-out executable.
 
 For a real analysis-and-fix test, install clang-tidy and clang-apply-replacements on PATH,
 then point to the matching run-clang-tidy script:
@@ -42,7 +44,7 @@ long paths, empty search results, selected-only filtering, output overflow, and 
 Keep file dialogs and settings errors readable.
 
 To capture the actual application window, enable the optional screenshot feature.
-The process exits after eframe captures a settled frame:
+Discovery finishes before capture, then the process exits after eframe captures a settled frame:
 
 ```sh
 EFRAME_SCREENSHOT_TO=doc/screenshot_main.png cargo run --locked --features screenshot

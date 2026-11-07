@@ -13,6 +13,7 @@ pub struct Config {
     pub apply_fixes: bool,
     pub jobs: u32,
     pub catalogue_from_tool: bool,
+    pub catalogue_binary: String,
     pub dark_theme: bool,
     pub fixes: Vec<Fix>,
 }
@@ -35,6 +36,7 @@ impl Default for Config {
             apply_fixes: false,
             jobs: 1,
             catalogue_from_tool: false,
+            catalogue_binary: String::new(),
             dark_theme: true,
             fixes: Vec::new(),
         }
@@ -84,8 +86,9 @@ impl Config {
         self.fixes.iter().filter(|fix| fix.enabled).count()
     }
 
-    pub fn replace_catalogue(&mut self, names: Vec<String>) {
+    pub fn replace_catalogue(&mut self, names: Vec<String>, binary: &str) {
         self.catalogue_from_tool = true;
+        self.catalogue_binary = binary.into();
         self.fixes = names
             .into_iter()
             .map(|name| {
@@ -139,10 +142,10 @@ mod tests {
             .find(|fix| fix.name == "modernize-use-nullptr")
             .unwrap()
             .enabled = true;
-        config.replace_catalogue(vec![
-            "modernize-use-nullptr".into(),
-            "new-toolchain-check".into(),
-        ]);
+        config.replace_catalogue(
+            vec!["modernize-use-nullptr".into(), "new-toolchain-check".into()],
+            "clang-tidy",
+        );
         config.merge_catalogue();
         assert_eq!(config.fixes.len(), 2);
         assert_eq!(config.selected_count(), 1);

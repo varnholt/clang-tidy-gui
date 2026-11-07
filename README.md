@@ -25,7 +25,7 @@ This app lets you build a focused list and run a separate pass for each check.
 
 - **Inspect first.** Analysis is the default; applying fixes is an explicit choice.
 - **Keep project settings.** Check selection is passed on the command line. Your `.clang-tidy` stays intact.
-- **Use your LLVM.** Refresh the check catalogue from your installed clang-tidy, with matching selections preserved.
+- **Use your LLVM.** The check catalogue updates automatically from your installed clang-tidy, with matching selections preserved.
 - **See what happened.** Live stdout and stderr, progress, elapsed time, exit failures, and copyable output.
 - **Stay in control.** Stop the queue after the active check finishes. A new run starts with a fresh stop state.
 - **Make it comfortable.** Search, check families, selection within the current view, resizable panels, and dark or light appearance.
@@ -66,7 +66,7 @@ Use tools from the same LLVM installation. A system Python capable of running th
 
 1. Choose the project's **working directory**.
 2. Select the actual **compile_commands.json** file from your build.
-3. Locate **run-clang-tidy**, then use **Refresh from installed clang-tidy** to load checks supported by your toolchain.
+3. Locate **run-clang-tidy**. Checks load automatically from the configured clang-tidy executable; change its path under **Runner options** if needed.
 4. Search for a few checks, such as `modernize-use-nullptr`, and select them.
 5. Choose **Run analysis** and inspect the output. Enable **Apply suggested fixes** when you are ready to edit source files.
 
@@ -122,8 +122,12 @@ An old `config.json` in the launch directory is imported if no user settings exi
 Malformed settings are reported and left untouched; saving is disabled for that session until the file is repaired or moved.
 The bundled starter catalogue is embedded in the executable, so an installed binary works outside a checkout.
 It is a historical subset of 250 checks last updated in July 2024; it is not a current or complete LLVM check list.
-Refreshing replaces it with your toolchain's catalogue and keeps matching selections.
-Refresh again after upgrading or changing the clang-tidy executable. The app does not update LLVM itself.
+On every launch, the app discovers checks from the configured clang-tidy in the background.
+It refreshes again after you change the executable path, waiting for a short pause in typing.
+Successful discovery replaces the catalogue, keeps matching selections, and saves the result.
+Discovery has a ten-second timeout. If it fails, the previous catalogue stays available, with its source and refresh failure shown above the list.
+Use **Refresh checks now** to retry or pick up an LLVM upgrade made while the app is open.
+The app does not download checks from the internet or update LLVM itself: its list follows the installed toolchain.
 Only the last 2,000 output chunks are retained; copy the output before starting another run.
 
 ## Development
