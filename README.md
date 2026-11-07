@@ -34,7 +34,17 @@ The app wraps LLVM's `run-clang-tidy` Python script. It does not bundle LLVM or 
 
 ## Install
 
-Version 0.2.0 is being prepared for its first crates.io release. For now, install from source:
+Install with Cargo:
+
+```sh
+cargo install clang-tidy-gui --locked
+clang-tidy-gui
+```
+
+Prebuilt binaries are available from [GitHub Releases](https://github.com/varnholt/clang-tidy-gui/releases).
+Python and LLVM are still required when using a prebuilt binary.
+
+To build from source:
 
 ```sh
 git clone https://github.com/varnholt/clang-tidy-gui.git

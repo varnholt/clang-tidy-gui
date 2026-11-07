@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.2.0 — Unreleased
+## 0.2.0 — 2026-11-08
 
 ### Workspace
 - Project sidebar, searchable check families, selected-only view, and selection limited to the visible checks.
