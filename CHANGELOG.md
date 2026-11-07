@@ -7,6 +7,7 @@
 - Dark and light appearance, resizable output, progress, elapsed time, and keyboard shortcuts.
 - Streamed stdout/stderr, bounded output history, and copyable logs.
 - Check discovery from the installed clang-tidy, preserving matching selections.
+- Include dotted Clang Static Analyzer names when discovering checks.
 
 ### Reliability
 - Use the selected compile_commands.json via its parent directory.

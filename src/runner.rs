@@ -50,7 +50,7 @@ fn parse_checks(output: &str) -> Result<Vec<String>, String> {
             line.contains('-')
                 && line
                     .chars()
-                    .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+                    .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_' || c == '.')
         })
         .map(str::to_owned)
         .collect();
@@ -401,8 +401,16 @@ mod tests {
 
     #[test]
     fn catalogue_parser_rejects_noise_and_empty_output() {
-        let names = parse_checks("Enabled checks:\n    modernize-use-nullptr\n    bugprone-branch-clone\n    modernize-use-nullptr\nwarning: ignored\n").unwrap();
-        assert_eq!(names, ["bugprone-branch-clone", "modernize-use-nullptr"]);
+        let names = parse_checks("Enabled checks:\n    modernize-use-nullptr\n    bugprone-branch-clone\n    clang-analyzer-core.CallAndMessage\n    clang-analyzer-optin.cplusplus.UninitializedObject\n    modernize-use-nullptr\nwarning: ignored\n").unwrap();
+        assert_eq!(
+            names,
+            [
+                "bugprone-branch-clone",
+                "clang-analyzer-core.CallAndMessage",
+                "clang-analyzer-optin.cplusplus.UninitializedObject",
+                "modernize-use-nullptr"
+            ]
+        );
         assert!(parse_checks("Enabled checks:\n").is_err());
     }
 }
@@ -420,6 +428,9 @@ mod llvm_smoke_test {
         let checks = discover_checks("clang-tidy").unwrap();
         assert!(checks.len() > 200);
         assert!(checks.iter().any(|name| name == "modernize-use-nullptr"));
+        assert!(checks
+            .iter()
+            .any(|name| name == "clang-analyzer-core.CallAndMessage"));
         let dir = tempfile::Builder::new()
             .prefix("tidy real project ")
             .tempdir()

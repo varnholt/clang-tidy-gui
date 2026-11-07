@@ -121,7 +121,9 @@ The full path is available by hovering over the settings note in the app.
 An old `config.json` in the launch directory is imported if no user settings exist.
 Malformed settings are reported and left untouched; saving is disabled for that session until the file is repaired or moved.
 The bundled starter catalogue is embedded in the executable, so an installed binary works outside a checkout.
+It is a historical subset of 250 checks last updated in July 2024; it is not a current or complete LLVM check list.
 Refreshing replaces it with your toolchain's catalogue and keeps matching selections.
+Refresh again after upgrading or changing the clang-tidy executable. The app does not update LLVM itself.
 Only the last 2,000 output chunks are retained; copy the output before starting another run.
 
 ## Development
