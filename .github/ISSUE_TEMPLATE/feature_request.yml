@@ -1,0 +1,14 @@
+name: Feature request
+description: Suggest a focused workflow improvement
+body:
+  - type: textarea
+    id: use_case
+    attributes:
+      label: What are you trying to do?
+      description: Describe the workflow and where the app gets in the way.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Suggested behavior

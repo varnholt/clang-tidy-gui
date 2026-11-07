@@ -1,0 +1,23 @@
+name: Bug report
+description: Report a reproducible problem
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What happened?
+      description: Include the expected behavior and steps to reproduce.
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: App version, OS, LLVM version, and Python version.
+    validations:
+      required: true
+  - type: textarea
+    id: output
+    attributes:
+      label: Run output
+      description: Copy relevant output from the app. Remove private paths or source code before posting.
+      render: text
