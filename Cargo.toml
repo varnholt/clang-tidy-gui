@@ -2,7 +2,7 @@
 name = "clang-tidy-gui"
 version = "0.2.0"
 edition = "2021"
-rust-version = "1.88"
+rust-version = "1.95"
 description = "A desktop workspace for running clang-tidy checks one at a time"
 license = "CC0-1.0"
 repository = "https://github.com/varnholt/clang-tidy-gui"

@@ -4,7 +4,7 @@ Small, focused changes are welcome. Open an issue for larger workflow changes be
 
 ## Build and check
 
-Use Rust 1.88 or newer. Install the Linux desktop development packages listed in the README if applicable.
+Use Rust 1.95 or newer. Install the Linux desktop development packages listed in the README if applicable.
 Python 3 must be on PATH: the runner tests launch small, temporary Python fixtures without needing LLVM.
 
 ```sh
