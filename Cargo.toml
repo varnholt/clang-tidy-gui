@@ -2,7 +2,7 @@
 name = "clang-tidy-gui"
 version = "0.2.0"
 edition = "2021"
-rust-version = "1.88"
+rust-version = "1.95"
 description = "A desktop workspace for running clang-tidy checks one at a time"
 license = "CC0-1.0"
 repository = "https://github.com/varnholt/clang-tidy-gui"
@@ -15,7 +15,7 @@ include = ["src/**", "fixes.txt", "Cargo.lock", "README.md", "LICENSE", "CHANGEL
 screenshot = ["eframe/__screenshot"]
 
 [dependencies]
-eframe = { version = "0.33.3", default-features = false, features = ["default_fonts", "glow", "wayland", "x11"] }
+eframe = { version = "0.37.0", default-features = false, features = ["default_fonts", "glow", "wayland", "x11"] }
 directories = "6"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"

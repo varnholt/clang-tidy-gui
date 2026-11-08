@@ -20,7 +20,7 @@
 - Embed the starter check catalogue so installation does not depend on the launch directory.
 
 ### Repository
-- Update eframe/egui to a consistent 0.33 release line compatible with Rust 1.88.
+- Update eframe/egui to 0.37, migrate the panel and app APIs, and require Rust 1.95.
 - Add crate metadata, a committed lockfile, regression tests, and a real LLVM smoke test.
 - Add cross-platform CI, minimum-version and package checks, dependency updates, and draft binary releases.
 - Expand installation, build database, contribution, and release documentation.

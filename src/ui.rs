@@ -49,7 +49,7 @@ impl Application {
         notice: Option<String>,
         save_enabled: bool,
     ) -> Self {
-        let mut style = (*cc.egui_ctx.style()).clone();
+        let mut style = (*cc.egui_ctx.global_style()).clone();
         style.visuals = egui::Visuals::dark();
         style.visuals.panel_fill = Color32::from_rgb(18, 24, 34);
         style.visuals.window_fill = Color32::from_rgb(25, 33, 46);
@@ -64,7 +64,7 @@ impl Application {
         style
             .text_styles
             .insert(egui::TextStyle::Heading, egui::FontId::proportional(23.0));
-        cc.egui_ctx.set_style(style);
+        cc.egui_ctx.set_global_style(style);
         let dark = config.dark_theme;
         apply_theme(&cc.egui_ctx, dark);
         let mut app = Self::with_settings(config, config_path, notice, save_enabled);
@@ -447,10 +447,11 @@ impl Application {
 }
 
 impl eframe::App for Application {
-    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+    fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        let ctx = ui.ctx().clone();
         self.poll();
         if self.refresh_due(Instant::now()) {
-            self.refresh_catalogue(ctx);
+            self.refresh_catalogue(&ctx);
         }
         let before = self.config.clone();
         let running = self.receiver.is_some();
@@ -461,16 +462,16 @@ impl eframe::App for Application {
             }
         }
         if ctx.input_mut(|i| i.consume_key(egui::Modifiers::COMMAND, egui::Key::Enter)) {
-            self.start(ctx);
+            self.start(&ctx);
         }
 
-        egui::TopBottomPanel::top("header")
+        egui::Panel::top("header")
             .frame(egui::Frame::new().inner_margin(20).fill(if self.dark {
                 Color32::from_rgb(13, 19, 28)
             } else {
                 Color32::from_gray(240)
             }))
-            .show(ctx, |ui| {
+            .show(ui, |ui| {
                 ui.horizontal(|ui| {
                     let (rect, _) =
                         ui.allocate_exact_size(egui::vec2(30.0, 30.0), egui::Sense::hover());
@@ -501,7 +502,7 @@ impl eframe::App for Application {
                         {
                             self.dark = !self.dark;
                             self.config.dark_theme = self.dark;
-                            apply_theme(ctx, self.dark);
+                            apply_theme(&ctx, self.dark);
                         }
                         ui.label(
                             RichText::new(format!("v{}", env!("CARGO_PKG_VERSION")))
@@ -512,8 +513,8 @@ impl eframe::App for Application {
                 });
             });
 
-        egui::TopBottomPanel::bottom("output").resizable(true).default_height(225.0).min_height(145.0)
-            .frame(egui::Frame::new().inner_margin(16).fill(ctx.style().visuals.panel_fill)).show(ctx, |ui| {
+        egui::Panel::bottom("output").resizable(true).default_size(225.0).min_size(145.0)
+            .frame(egui::Frame::new().inner_margin(16).fill(ui.visuals().panel_fill)).show(ui, |ui| {
             ui.horizontal(|ui| {
                 eyebrow(ui, "03 / RUN");
                 let elapsed = self.started.map_or(self.elapsed, |t| t.elapsed());
@@ -525,7 +526,7 @@ impl eframe::App for Application {
                         if ui.add_enabled(!self.stopping, egui::Button::new(if self.stopping { "Stopping after this check…" } else { "Stop after this check" })).clicked() { self.stop(); }
                     } else {
                         let label = if self.config.apply_fixes { "Run & apply fixes" } else { "Run analysis" };
-                        if ui.add_enabled(self.config.selected_count() > 0, egui::Button::new(RichText::new(label).color(Color32::from_rgb(13, 32, 30)).strong()).fill(ACCENT)).on_hover_text("Ctrl+Enter").clicked() { self.start(ctx); }
+                        if ui.add_enabled(self.config.selected_count() > 0, egui::Button::new(RichText::new(label).color(Color32::from_rgb(13, 32, 30)).strong()).fill(ACCENT)).on_hover_text("Ctrl+Enter").clicked() { self.start(&ctx); }
                     }
                     if ui.small_button("Copy output").clicked() { ctx.copy_text(self.output.iter().cloned().collect::<Vec<_>>().join("\n")); }
                 });
@@ -546,24 +547,24 @@ impl eframe::App for Application {
                 for line in &self.output { ui.label(RichText::new(line).monospace().size(12.0)); }
             });
         });
-        egui::SidePanel::left("setup")
+        egui::Panel::left("setup")
             .resizable(true)
-            .default_width(330.0)
-            .min_width(280.0)
-            .max_width(440.0)
+            .default_size(330.0)
+            .min_size(280.0)
+            .max_size(440.0)
             .frame(
                 egui::Frame::new()
                     .inner_margin(20)
-                    .fill(ctx.style().visuals.panel_fill),
+                    .fill(ui.visuals().panel_fill),
             )
-            .show(ctx, |ui| self.setup(ui));
+            .show(ui, |ui| self.setup(ui));
         egui::CentralPanel::default()
             .frame(
                 egui::Frame::new()
                     .inner_margin(22)
-                    .fill(ctx.style().visuals.panel_fill),
+                    .fill(ui.visuals().panel_fill),
             )
-            .show(ctx, |ui| self.checks(ui));
+            .show(ui, |ui| self.checks(ui));
 
         if self.config != before {
             self.dirty_since = Some(Instant::now());

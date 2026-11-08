@@ -6,7 +6,7 @@ A small desktop workspace for [clang-tidy](https://clang.llvm.org/extra/clang-ti
 Choose checks, run them one at a time, and follow the diagnostics without building a command line by hand.
 
 [![CI](https://github.com/varnholt/clang-tidy-gui/actions/workflows/ci.yml/badge.svg)](https://github.com/varnholt/clang-tidy-gui/actions/workflows/ci.yml)
-[![Rust](https://img.shields.io/badge/Rust-1.88%2B-93450a)](https://www.rust-lang.org/)
+[![Rust](https://img.shields.io/badge/Rust-1.95%2B-93450a)](https://www.rust-lang.org/)
 [![License: CC0](https://img.shields.io/badge/license-CC0--1.0-blue)](LICENSE)
 
 ![The clang-tidy-gui workspace: project setup, searchable checks, and run output](doc/screenshot_main.png)
@@ -53,7 +53,7 @@ cargo install --path . --locked
 clang-tidy-gui
 ```
 
-You need **Rust 1.88 or newer** to build. Windows, macOS, and Linux are CI targets.
+You need **Rust 1.95 or newer** to build. Windows, macOS, and Linux are CI targets.
 Linux builds also need development packages for the desktop backend. On Ubuntu:
 
 ```sh
